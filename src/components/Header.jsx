@@ -104,10 +104,13 @@ export default function Header() {
     } else {
       setGroup("statistics");
       setActiveMenu("basics");
-      if (!location.pathname.startsWith("/exercise/")) {
-        navigate(`/exercise/${DEFAULT_BY_GROUP.statistics}`, { replace: true });
-      }
-    }
+      const allow = ["/login", "/admin"]; // allowlist of non-exercise roots
+      const isAllowed =
+      allow.some((p) => location.pathname === p || location.pathname.startsWith(p + "/"));
+          if (!location.pathname.startsWith("/exercise/") && !isAllowed) {
+          navigate(`/exercise/${DEFAULT_BY_GROUP.statistics}`, { replace: true });
+          }
+     }
   }, [location.pathname, navigate]);
 
   const currentCodeList = codeMap?.[group]?.[activeMenu] ?? [];
