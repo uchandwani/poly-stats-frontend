@@ -1,0 +1,12 @@
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+
+input {
+  padding: 4px 8px;
+}
+
+.problem-card { max-width: 1900px; }
+

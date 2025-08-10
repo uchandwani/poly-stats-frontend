@@ -1,0 +1,29 @@
+import React, { useEffect, useState } from "react";
+import { API_BASE } from "../services/apiBase";
+
+export default function ProblemDescriptionDisplay({ code }) {
+  const [description, setDescription] = useState("");
+  const [title, setTitle] = useState("");
+
+  useEffect(() => {
+    async function fetchProblem() {
+      try {
+        const res = await fetch(`${API_BASE}/exercises/by-code/${code}`);
+        const data = await res.json();
+        setTitle(data.title);
+        setDescription(data.questionText);
+      } catch (err) {
+        console.error("❌ Failed to load problem description:", err);
+      }
+    }
+
+    if (code) fetchProblem();
+  }, [code]);
+
+  return (
+    <div className="problem-description-display">
+      <h2>{title}</h2>
+      <p>{description}</p>
+    </div>
+  );
+}
