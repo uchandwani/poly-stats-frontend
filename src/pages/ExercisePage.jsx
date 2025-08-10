@@ -23,7 +23,7 @@ export default function ExercisePage() {
       setLoading(true);
 
       axios
-        .get(`${baseUrl}/api/exercises/by-code/${code}`)
+        .get(`${API_BASE}/exercises/by-code/${code}`)
         .then(async (res) => {
           setExercise(res.data);
           setError("");

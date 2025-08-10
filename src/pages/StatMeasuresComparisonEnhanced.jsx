@@ -30,7 +30,7 @@ export default function StatMeasuresComparisonEnhanced() {
   useEffect(() => {
     async function loadExerciseAndSubmission() {
       try {
-        const res = await fetch(`/api/exercises/by-code/${code}`);
+        const res = await fetch(`${API_BASE}/exercises/by-code/${code}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
 
