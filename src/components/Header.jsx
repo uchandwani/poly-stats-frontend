@@ -1,76 +1,63 @@
+// src/components/Header.jsx
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { fetchGroupedExercises } from "../api/exerciseService";
 
-// Centralized labels
+// Map tabs & fallbacks (unchanged pieces trimmed for brevity)
 const exerciseConfig = {
-  statistics: {
-    basics: "Basics",
-    mean: "Mean Deviation",
-    sd: "Standard Deviation",
-    insights: "Insights",
-  },
-  differential: {
-    functions: "Functions",
-    evenodd: "Even/Odd Functions",
-    derivatives: "Derivative",
-    applications: "Applications",
-  },
+  statistics: { basics: "Basics", mean: "Mean Deviation", sd: "Standard Deviation", insights: "Insights" },
+  differential: { functions: "Functions", evenodd: "Even/Odd Functions", derivatives: "Derivative", applications: "Applications" },
 };
-
-// URL prefixes
 const prefixMap = {
-  basics: "Basics",
-  mean: "Mean",
-  sd: "SD",
-  insights: "Insights",
-  functions: "Functions",
-  evenodd: "EvenOdd",
-  derivatives: "Derivative",
-  applications: "Applications",
+  basics: "Basics", mean: "Mean", sd: "SD", insights: "Insights",
+  functions: "Functions", evenodd: "EvenOdd", derivatives: "Derivative", applications: "Applications",
 };
+const DEFAULT_BY_GROUP = { statistics: "Basics_01", differential: "Functions_01" };
 
-// Default landing per top group
-const DEFAULT_BY_GROUP = {
-  statistics: "Basics_01",
-  differential: "Functions_01",
-};
-
-// Derive section key from /exercise/Prefix_##
 function sectionKeyFromPath(pathname) {
   const m = pathname.match(/\/exercise\/([A-Za-z]+)_\d+/);
   if (!m) return null;
   const prefix = m[1];
-  const entry = Object.entries(prefixMap).find(
-    ([, v]) => v.toLowerCase() === prefix.toLowerCase()
-  );
+  const entry = Object.entries(prefixMap).find(([, v]) => v.toLowerCase() === prefix.toLowerCase());
   return entry ? entry[0] : null;
 }
 
-const readUser = () => {
+function getUserFromStorage() {
   try {
     const raw = localStorage.getItem("user");
-    return raw ? JSON.parse(raw) : null;
+    return raw && raw !== "undefined" ? JSON.parse(raw) : null;
   } catch {
     return null;
   }
-};
+}
 
 export default function Header() {
   const location = useLocation();
   const navigate = useNavigate();
 
+  // --- auth state that actually re-renders the chip ---
+  const [user, setUser] = useState(getUserFromStorage() || { username: "Guest", role: "guest" });
+  const isLoggedIn = Boolean(localStorage.getItem("token"));
+
+  // reflect auth changes from login/logout or other tabs
+  useEffect(() => {
+    const sync = () => setUser(getUserFromStorage() || { username: "Guest", role: "guest" });
+    sync(); // on mount + route change
+    window.addEventListener("storage", sync);
+    window.addEventListener("auth-changed", sync);
+    return () => {
+      window.removeEventListener("storage", sync);
+      window.removeEventListener("auth-changed", sync);
+    };
+  }, [location.pathname]);
+
   const [group, setGroup] = useState("statistics");
   const [activeMenu, setActiveMenu] = useState("basics");
   const [selectedExerciseIndex, setSelectedExerciseIndex] = useState(null);
+
   const [codeMap, setCodeMap] = useState({ statistics: {}, differential: {} });
 
-  // Auth state (no automatic guest here)
-  const [user, setUser] = useState(readUser());
-  const token = localStorage.getItem("token");
-  const isLoggedIn = Boolean(token) && user && user.role !== "guest";
-
-  // Load grouped exercises
+  // Fetch grouped exercise codes
   useEffect(() => {
     (async () => {
       const grouped = await fetchGroupedExercises();
@@ -91,41 +78,22 @@ export default function Header() {
     })();
   }, []);
 
-  // URL drives group/menu
+  // URL drives section/group
   useEffect(() => {
     const key = sectionKeyFromPath(location.pathname);
     if (key) {
       setActiveMenu(key);
-      setGroup(
-        ["basics", "mean", "sd", "insights"].includes(key)
-          ? "statistics"
-          : "differential"
-      );
+      setGroup(["basics", "mean", "sd", "insights"].includes(key) ? "statistics" : "differential");
     } else {
       setGroup("statistics");
       setActiveMenu("basics");
-      const allow = ["/login", "/admin"]; // allowlist of non-exercise roots
-      const isAllowed =
-      allow.some((p) => location.pathname === p || location.pathname.startsWith(p + "/"));
-          if (!location.pathname.startsWith("/exercise/") && !isAllowed) {
-          navigate(`/exercise/${DEFAULT_BY_GROUP.statistics}`, { replace: true });
-          }
-     }
+      if (!location.pathname.startsWith("/exercise/")) {
+        navigate(`/exercise/${DEFAULT_BY_GROUP.statistics}`, { replace: true });
+      }
+    }
   }, [location.pathname, navigate]);
 
   const currentCodeList = codeMap?.[group]?.[activeMenu] ?? [];
-
-  // Keep the blue number highlight in sync with the URL
-  useEffect(() => {
-    const m = location.pathname.match(/\/exercise\/([A-Za-z]+_\d+)/);
-    if (m && currentCodeList.length) {
-      const idx = currentCodeList.findIndex((x) => x.code === m[1]);
-      setSelectedExerciseIndex(idx >= 0 ? idx : null);
-    } else {
-      setSelectedExerciseIndex(null);
-    }
-  }, [location.pathname, currentCodeList]);
-
   const path = location.pathname || "";
   const isStatisticsActive = /\/exercise\/(Basics|Mean|SD|Insights)_\d+/i.test(path);
   const isDifferentialActive = /\/exercise\/(Functions|EvenOdd|Derivative|Applications)_\d+/i.test(path);
@@ -133,16 +101,18 @@ export default function Header() {
   const handleLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
-    setUser(null);
-    navigate("/login");
+    window.dispatchEvent(new Event("auth-changed")); // tell header to refresh
+    navigate("/");
   };
 
-  const handleGuest = () => {
+  const continueAsGuest = () => {
     const guest = { username: "Guest", role: "guest" };
     localStorage.setItem("user", JSON.stringify(guest));
     localStorage.setItem("token", "guest-token");
-    setUser(guest);
-    navigate(`/exercise/${DEFAULT_BY_GROUP.statistics}`);
+    window.dispatchEvent(new Event("auth-changed"));
+    if (!location.pathname.startsWith("/exercise/")) {
+      navigate(`/exercise/${DEFAULT_BY_GROUP.statistics}`);
+    }
   };
 
   const handleExerciseClick = (index) => {
@@ -152,8 +122,8 @@ export default function Header() {
       setSelectedExerciseIndex(index);
     } else {
       const prefix = prefixMap[activeMenu];
-      const fallbackCode = prefix ? `${prefix}_01` : DEFAULT_BY_GROUP[group];
-      if (fallbackCode) navigate(`/exercise/${fallbackCode}`);
+      const fallback = prefix ? `${prefix}_01` : DEFAULT_BY_GROUP[group];
+      navigate(`/exercise/${fallback}`);
       setSelectedExerciseIndex(null);
     }
   };
@@ -165,7 +135,7 @@ export default function Header() {
   return (
     <header className="w-full bg-gray-100 border-b shadow-sm">
       <div className="max-w-screen-xl mx-auto px-4 py-3 flex flex-wrap justify-between items-center gap-3">
-        {/* Top-level: Statistics / Differential */}
+        {/* Top-level group buttons */}
         <nav className="flex gap-2">
           <button
             type="button"
@@ -176,10 +146,10 @@ export default function Header() {
               setSelectedExerciseIndex(null);
               navigate(`/exercise/${DEFAULT_BY_GROUP.statistics}`);
             }}
-            title="Statistics (Basics_01)"
           >
             Statistics
           </button>
+
           <button
             type="button"
             className={`${topBtnBase} ${isDifferentialActive ? topBtnActive : topBtnInactive}`}
@@ -189,7 +159,6 @@ export default function Header() {
               setSelectedExerciseIndex(null);
               navigate(`/exercise/${DEFAULT_BY_GROUP.differential}`);
             }}
-            title="Differential (Functions_01)"
           >
             Differential
           </button>
@@ -201,6 +170,7 @@ export default function Header() {
             const firstFromApi = codeMap?.[group]?.[key]?.[0]?.code;
             const prefix = prefixMap[key];
             const targetCode = firstFromApi || (prefix ? `${prefix}_01` : DEFAULT_BY_GROUP[group]);
+
             return (
               <Link
                 key={key}
@@ -217,56 +187,54 @@ export default function Header() {
           })}
         </nav>
 
-        {/* Title */}
-        <h1 className="text-base font-semibold text-center flex-1 text-gray-800">
-          {exerciseConfig[group]?.[activeMenu] ?? "Welcome"}
-        </h1>
-
-        {/* Exercise pills + auth controls */}
+        {/* Right side: user chip + auth actions + exercise buttons */}
         <div className="flex items-center gap-2 flex-wrap justify-end">
+          {/* Exercise number buttons */}
           {currentCodeList.map((ex, index) => (
             <button
               key={ex.code}
               onClick={() => handleExerciseClick(index)}
               title={ex.code}
               className={`w-6 h-6 text-xs font-bold border rounded transition-all ${
-                selectedExerciseIndex === index
-                  ? "bg-blue-500 text-white"
-                  : "bg-white text-blue-800 hover:bg-blue-100"
+                selectedExerciseIndex === index ? "bg-blue-500 text-white" : "bg-white text-blue-800 hover:bg-blue-100"
               }`}
             >
               {index + 1}
             </button>
           ))}
 
-          {isLoggedIn ? (
+          {/* User chip - always visible */}
+          <span className="px-2 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-medium border border-blue-100">
+            {user?.username ?? "Guest"}{" "}
+            <span className="opacity-70">({user?.role ?? "guest"})</span>
+          </span>
+
+          {/* Auth actions */}
+          {!isLoggedIn || user?.role === "guest" ? (
             <>
-              <span className="text-sm text-gray-600">
-                {user.username} ({user.role})
-              </span>
-              <button
-                onClick={handleLogout}
-                className="bg-red-600 text-white text-xs px-2 py-1 rounded hover:bg-red-700"
-              >
-                Logout
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                onClick={() => navigate("/login")}
+              <Link
+                to="/"
                 className="bg-blue-600 text-white text-xs px-2 py-1 rounded hover:bg-blue-700"
+                title="Log in"
               >
                 Login
-              </button>
+              </Link>
               <button
-                onClick={handleGuest}
+                onClick={continueAsGuest}
                 className="bg-gray-600 text-white text-xs px-2 py-1 rounded hover:bg-gray-700"
-                title="Use the app without an account"
+                title="Continue as Guest"
               >
                 Continue as Guest
               </button>
             </>
+          ) : (
+            <button
+              onClick={handleLogout}
+              className="bg-red-600 text-white text-xs px-2 py-1 rounded hover:bg-red-700"
+              title="Log out"
+            >
+              Logout
+            </button>
           )}
         </div>
       </div>
