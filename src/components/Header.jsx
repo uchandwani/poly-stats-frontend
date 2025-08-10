@@ -2,7 +2,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { fetchGroupedExercises } from "../api/exerciseService";
 
-// ✅ Centralized config for easier expansion
+// Centralized labels
 const exerciseConfig = {
   statistics: {
     basics: "Basics",
@@ -18,7 +18,7 @@ const exerciseConfig = {
   },
 };
 
-// ✅ Prefix mapping for proper URL matching and fallbacks
+// URL prefixes
 const prefixMap = {
   basics: "Basics",
   mean: "Mean",
@@ -30,13 +30,13 @@ const prefixMap = {
   applications: "Applications",
 };
 
-// ✅ Default landing code for each top-level group
+// Default landing per top group
 const DEFAULT_BY_GROUP = {
   statistics: "Basics_01",
   differential: "Functions_01",
 };
 
-// ✅ Helper: derive section key from URL (/exercise/Basics_02 -> "basics")
+// Derive section key from /exercise/Prefix_##
 function sectionKeyFromPath(pathname) {
   const m = pathname.match(/\/exercise\/([A-Za-z]+)_\d+/);
   if (!m) return null;
@@ -47,35 +47,30 @@ function sectionKeyFromPath(pathname) {
   return entry ? entry[0] : null;
 }
 
+const readUser = () => {
+  try {
+    const raw = localStorage.getItem("user");
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+};
+
 export default function Header() {
   const location = useLocation();
   const navigate = useNavigate();
 
   const [group, setGroup] = useState("statistics");
-  const [activeMenu, setActiveMenu] = useState("basics"); // sensible default
+  const [activeMenu, setActiveMenu] = useState("basics");
   const [selectedExerciseIndex, setSelectedExerciseIndex] = useState(null);
+  const [codeMap, setCodeMap] = useState({ statistics: {}, differential: {} });
 
-  const [codeMap, setCodeMap] = useState({
-    statistics: {},
-    differential: {},
-  });
+  // Auth state (no automatic guest here)
+  const [user, setUser] = useState(readUser());
+  const token = localStorage.getItem("token");
+  const isLoggedIn = Boolean(token) && user && user.role !== "guest";
 
-  // ✅ Load user (guest fallback)
-  let user = null;
-  try {
-    const raw = localStorage.getItem("user");
-    user = raw && raw !== "undefined" ? JSON.parse(raw) : null;
-  } catch {
-    user = null;
-  }
-  if (!user) {
-    user = { username: "Guest", role: "guest" };
-    localStorage.setItem("user", JSON.stringify(user));
-    localStorage.setItem("token", "guest-token");
-  }
-  const isLoggedIn = !!localStorage.getItem("token");
-
-  // ✅ Fetch grouped exercises
+  // Load grouped exercises
   useEffect(() => {
     (async () => {
       const grouped = await fetchGroupedExercises();
@@ -96,9 +91,9 @@ export default function Header() {
     })();
   }, []);
 
-  // ✅ URL is the single source of truth for section/group
+  // URL drives group/menu
   useEffect(() => {
-    const key = sectionKeyFromPath(location.pathname); // e.g. "basics"
+    const key = sectionKeyFromPath(location.pathname);
     if (key) {
       setActiveMenu(key);
       setGroup(
@@ -107,7 +102,6 @@ export default function Header() {
           : "differential"
       );
     } else {
-      // No deep-link → land on Statistics default
       setGroup("statistics");
       setActiveMenu("basics");
       if (!location.pathname.startsWith("/exercise/")) {
@@ -116,19 +110,36 @@ export default function Header() {
     }
   }, [location.pathname, navigate]);
 
-  // ✅ Current list driven by URL-derived state
   const currentCodeList = codeMap?.[group]?.[activeMenu] ?? [];
 
-  // ✅ For blue highlight on the two top buttons, use URL
+  // Keep the blue number highlight in sync with the URL
+  useEffect(() => {
+    const m = location.pathname.match(/\/exercise\/([A-Za-z]+_\d+)/);
+    if (m && currentCodeList.length) {
+      const idx = currentCodeList.findIndex((x) => x.code === m[1]);
+      setSelectedExerciseIndex(idx >= 0 ? idx : null);
+    } else {
+      setSelectedExerciseIndex(null);
+    }
+  }, [location.pathname, currentCodeList]);
+
   const path = location.pathname || "";
   const isStatisticsActive = /\/exercise\/(Basics|Mean|SD|Insights)_\d+/i.test(path);
-  const isDifferentialActive = /\/exercise\/(Functions|EvenOdd|Derivative|Applications)_\d+/i.test(
-    path
-  );
+  const isDifferentialActive = /\/exercise\/(Functions|EvenOdd|Derivative|Applications)_\d+/i.test(path);
 
   const handleLogout = () => {
-    localStorage.clear();
-    navigate("/");
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    setUser(null);
+    navigate("/login");
+  };
+
+  const handleGuest = () => {
+    const guest = { username: "Guest", role: "guest" };
+    localStorage.setItem("user", JSON.stringify(guest));
+    localStorage.setItem("token", "guest-token");
+    setUser(guest);
+    navigate(`/exercise/${DEFAULT_BY_GROUP.statistics}`);
   };
 
   const handleExerciseClick = (index) => {
@@ -137,16 +148,13 @@ export default function Header() {
       navigate(`/exercise/${code}`);
       setSelectedExerciseIndex(index);
     } else {
-      const fallbackCode = (() => {
-        const prefix = prefixMap[activeMenu];
-        return prefix ? `${prefix}_01` : DEFAULT_BY_GROUP[group];
-      })();
+      const prefix = prefixMap[activeMenu];
+      const fallbackCode = prefix ? `${prefix}_01` : DEFAULT_BY_GROUP[group];
       if (fallbackCode) navigate(`/exercise/${fallbackCode}`);
       setSelectedExerciseIndex(null);
     }
   };
 
-  // Styles
   const topBtnBase = "px-3 py-1 rounded border text-sm transition-colors";
   const topBtnActive = "bg-blue-600 text-white border-blue-600";
   const topBtnInactive = "bg-gray-100 text-blue-800 border-gray-200 hover:bg-blue-200";
@@ -154,7 +162,7 @@ export default function Header() {
   return (
     <header className="w-full bg-gray-100 border-b shadow-sm">
       <div className="max-w-screen-xl mx-auto px-4 py-3 flex flex-wrap justify-between items-center gap-3">
-        {/* ✅ Top-level: Statistics / Differential */}
+        {/* Top-level: Statistics / Differential */}
         <nav className="flex gap-2">
           <button
             type="button"
@@ -163,13 +171,12 @@ export default function Header() {
               setGroup("statistics");
               setActiveMenu("basics");
               setSelectedExerciseIndex(null);
-              navigate(`/exercise/${DEFAULT_BY_GROUP.statistics}`); // Basics_01
+              navigate(`/exercise/${DEFAULT_BY_GROUP.statistics}`);
             }}
             title="Statistics (Basics_01)"
           >
             Statistics
           </button>
-
           <button
             type="button"
             className={`${topBtnBase} ${isDifferentialActive ? topBtnActive : topBtnInactive}`}
@@ -177,7 +184,7 @@ export default function Header() {
               setGroup("differential");
               setActiveMenu("functions");
               setSelectedExerciseIndex(null);
-              navigate(`/exercise/${DEFAULT_BY_GROUP.differential}`); // Functions_01
+              navigate(`/exercise/${DEFAULT_BY_GROUP.differential}`);
             }}
             title="Differential (Functions_01)"
           >
@@ -185,13 +192,12 @@ export default function Header() {
           </button>
         </nav>
 
-        {/* ✅ Section tabs (use first code from API or fallback Prefix_01) */}
+        {/* Section tabs */}
         <nav className="flex gap-4 text-sm font-medium text-blue-700">
           {Object.entries(exerciseConfig[group]).map(([key, label]) => {
             const firstFromApi = codeMap?.[group]?.[key]?.[0]?.code;
             const prefix = prefixMap[key];
             const targetCode = firstFromApi || (prefix ? `${prefix}_01` : DEFAULT_BY_GROUP[group]);
-
             return (
               <Link
                 key={key}
@@ -200,9 +206,7 @@ export default function Header() {
                   setActiveMenu(key);
                   setSelectedExerciseIndex(null);
                 }}
-                className={`hover:underline ${
-                  activeMenu === key ? "underline font-bold text-black" : ""
-                }`}
+                className={`hover:underline ${activeMenu === key ? "underline font-bold text-black" : ""}`}
               >
                 {label}
               </Link>
@@ -210,12 +214,12 @@ export default function Header() {
           })}
         </nav>
 
-        {/* ✅ Active section label */}
+        {/* Title */}
         <h1 className="text-base font-semibold text-center flex-1 text-gray-800">
           {exerciseConfig[group]?.[activeMenu] ?? "Welcome"}
         </h1>
 
-        {/* ✅ Exercise buttons + user info */}
+        {/* Exercise pills + auth controls */}
         <div className="flex items-center gap-2 flex-wrap justify-end">
           {currentCodeList.map((ex, index) => (
             <button
@@ -232,17 +236,34 @@ export default function Header() {
             </button>
           ))}
 
-          <span className="text-sm text-gray-600">
-            {user.username} ({user.role})
-          </span>
-
-          {isLoggedIn && user.role !== "guest" && (
-            <button
-              onClick={handleLogout}
-              className="bg-red-600 text-white text-xs px-2 py-1 rounded hover:bg-red-700"
-            >
-              Logout
-            </button>
+          {isLoggedIn ? (
+            <>
+              <span className="text-sm text-gray-600">
+                {user.username} ({user.role})
+              </span>
+              <button
+                onClick={handleLogout}
+                className="bg-red-600 text-white text-xs px-2 py-1 rounded hover:bg-red-700"
+              >
+                Logout
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => navigate("/login")}
+                className="bg-blue-600 text-white text-xs px-2 py-1 rounded hover:bg-blue-700"
+              >
+                Login
+              </button>
+              <button
+                onClick={handleGuest}
+                className="bg-gray-600 text-white text-xs px-2 py-1 rounded hover:bg-gray-700"
+                title="Use the app without an account"
+              >
+                Continue as Guest
+              </button>
+            </>
           )}
         </div>
       </div>
