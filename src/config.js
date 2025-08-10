@@ -1,4 +1,9 @@
 // src/config.js
-export const BASE = import.meta.env.DEV
-  ? "http://localhost:5002/api" // Direct in dev
-  : "/api";                     // Relative in prod
+const fromEnv = import.meta.env?.VITE_API_URL?.trim();
+const isDev = import.meta.env.DEV;
+
+// Use VITE_API_URL if provided; otherwise sensible fallbacks.
+export const API_BASE_URL = (
+  fromEnv ||
+  (isDev ? 'http://localhost:5002/api' : 'https://poly-stats-backend.onrender.com/api')
+).replace(/\/$/, ''); // no trailing slash
