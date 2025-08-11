@@ -5,5 +5,6 @@ const isDev = import.meta.env.DEV;
 // Use VITE_API_URL if provided; otherwise sensible fallbacks.
 export const API_BASE_URL = (
   fromEnv ||
-  (isDev ? 'http://localhost:5002/api' : 'https://poly-stats-backend.onrender.com/api')
+  (isDev ? 'http://localhost:5002/api' : '/api')
 ).replace(/\/$/, ''); // no trailing slash
+
