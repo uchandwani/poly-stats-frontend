@@ -79,19 +79,23 @@ export default function Header() {
   }, []);
 
   // URL drives section/group
-  useEffect(() => {
-    const key = sectionKeyFromPath(location.pathname);
-    if (key) {
-      setActiveMenu(key);
-      setGroup(["basics", "mean", "sd", "insights"].includes(key) ? "statistics" : "differential");
-    } else {
-      setGroup("statistics");
-      setActiveMenu("basics");
-      if (!location.pathname.startsWith("/exercise/")) {
-        navigate(`/exercise/${DEFAULT_BY_GROUP.statistics}`, { replace: true });
+  // URL drives section/group + a single safe default redirect from root
+    useEffect(() => {
+      const key = sectionKeyFromPath(location.pathname);
+      if (key) {
+        setActiveMenu(key);
+        setGroup(["basics", "mean", "sd", "insights"].includes(key) ? "statistics" : "differential");
+        return;
       }
-    }
-  }, [location.pathname, navigate]);
+      // Only redirect from "/" (landing). Do NOT redirect from other routes to avoid loops.
+      if (location.pathname === "/" || location.pathname === "/index.html") {
+        setGroup("statistics");
+        setActiveMenu("basics");
+        const target = `/exercise/${DEFAULT_BY_GROUP.statistics}`;
+        if (location.pathname !== target) navigate(target, { replace: true });
+      }
+    }, [location.pathname, navigate]);
+
 
   const currentCodeList = codeMap?.[group]?.[activeMenu] ?? [];
   const path = location.pathname || "";

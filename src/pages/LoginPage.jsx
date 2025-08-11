@@ -35,10 +35,10 @@ export default function LoginPage() {
     alert(`✅ Welcome ${user.username} (${user.role})`);
 
     // ✅ Redirect based on role
-    if (user.role === "admin") {
-      navigate("/admin/dashboard");
+     if (user.role === "admin") {
+     navigate("/admin/dashboard", { replace: true });
     } else {
-      navigate("/exercise/Basics_02");
+     navigate("/exercise/Basics_02", { replace: true });
     }
 
   } catch (err) {
