@@ -1,6 +1,6 @@
 import { useState } from "react";
 import axios from "axios";
-import { useNavigate } from "react-router-dom";
+import { useSafeNavigate } from "../hooks/useSafeNavigate";
 import { AUTH_BASE } from "../services/apiBase";
 
 
@@ -10,7 +10,7 @@ export default function LoginPage() {
 
   console.log("The user name is ", username);
   const [error, setError] = useState("");
-  const navigate = useNavigate();
+  const safeNavigate = useSafeNavigate();
 
   const handleSubmit = async (e) => {
   e.preventDefault();
@@ -36,9 +36,9 @@ export default function LoginPage() {
 
     // ✅ Redirect based on role
      if (user.role === "admin") {
-     navigate("/admin/dashboard", { replace: true });
+     safeNavigate("/admin/dashboard", { replace: true });
     } else {
-     navigate("/exercise/Basics_02", { replace: true });
+     safeNavigate("/exercise/Basics_01", { replace: true });
     }
 
   } catch (err) {

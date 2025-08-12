@@ -1,5 +1,6 @@
 // src/components/Header.jsx
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
+import { useSafeNavigate } from "../hooks/useSafeNavigate";
 import { useEffect, useState } from "react";
 import { fetchGroupedExercises } from "../api/exerciseService";
 
@@ -33,7 +34,7 @@ function getUserFromStorage() {
 
 export default function Header() {
   const location = useLocation();
-  const navigate = useNavigate();
+  const safeNavigate = useSafeNavigate();
 
   // --- auth state that actually re-renders the chip ---
   const [user, setUser] = useState(getUserFromStorage() || { username: "Guest", role: "guest" });
@@ -92,9 +93,9 @@ export default function Header() {
         setGroup("statistics");
         setActiveMenu("basics");
         const target = `/exercise/${DEFAULT_BY_GROUP.statistics}`;
-        if (location.pathname !== target) navigate(target, { replace: true });
+        if (location.pathname !== target) safeNavigate(target, { replace: true });
       }
-    }, [location.pathname, navigate]);
+    }, [location.pathname, safeNavigate]);
 
 
   const currentCodeList = codeMap?.[group]?.[activeMenu] ?? [];
@@ -106,7 +107,7 @@ export default function Header() {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     window.dispatchEvent(new Event("auth-changed")); // tell header to refresh
-    navigate("/");
+    safeNavigate("/", { replace: true });
   };
 
   const continueAsGuest = () => {
@@ -115,19 +116,19 @@ export default function Header() {
     localStorage.setItem("token", "guest-token");
     window.dispatchEvent(new Event("auth-changed"));
     if (!location.pathname.startsWith("/exercise/")) {
-      navigate(`/exercise/${DEFAULT_BY_GROUP.statistics}`);
+      safeNavigate(`/exercise/${DEFAULT_BY_GROUP.statistics}`, { replace: true });
     }
   };
 
   const handleExerciseClick = (index) => {
     const code = currentCodeList[index]?.code;
     if (code) {
-      navigate(`/exercise/${code}`);
+      safeNavigate(`/exercise/${code}`, {replace: true});
       setSelectedExerciseIndex(index);
     } else {
       const prefix = prefixMap[activeMenu];
       const fallback = prefix ? `${prefix}_01` : DEFAULT_BY_GROUP[group];
-      navigate(`/exercise/${fallback}`);
+      safeNavigate(`/exercise/${fallback}`, {replace: true});
       setSelectedExerciseIndex(null);
     }
   };
@@ -148,7 +149,7 @@ export default function Header() {
               setGroup("statistics");
               setActiveMenu("basics");
               setSelectedExerciseIndex(null);
-              navigate(`/exercise/${DEFAULT_BY_GROUP.statistics}`);
+              safeNavigate(`/exercise/${DEFAULT_BY_GROUP.statistics}`, { replace: true });
             }}
           >
             Statistics
@@ -161,7 +162,7 @@ export default function Header() {
               setGroup("differential");
               setActiveMenu("functions");
               setSelectedExerciseIndex(null);
-              navigate(`/exercise/${DEFAULT_BY_GROUP.differential}`);
+              safeNavigate(`/exercise/${DEFAULT_BY_GROUP.differential}`, { replace: true });
             }}
           >
             Differential
