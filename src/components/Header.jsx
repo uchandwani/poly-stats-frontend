@@ -218,7 +218,7 @@ export default function Header() {
           {!isLoggedIn || user?.role === "guest" ? (
             <>
               <Link
-                to="/"
+                to="/login"
                 className="bg-blue-600 text-white text-xs px-2 py-1 rounded hover:bg-blue-700"
                 title="Log in"
               >
