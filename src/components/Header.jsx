@@ -1,7 +1,7 @@
 // src/components/Header.jsx
 import { Link, useLocation } from "react-router-dom";
 import { useSafeNavigate } from "../hooks/useSafeNavigate";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { fetchGroupedExercises } from "../api/exerciseService";
 
 // Map tabs & fallbacks (unchanged pieces trimmed for brevity)
@@ -14,6 +14,18 @@ const prefixMap = {
   functions: "Functions", evenodd: "EvenOdd", derivatives: "Derivative", applications: "Applications",
 };
 const DEFAULT_BY_GROUP = { statistics: "Basics_01", differential: "Functions_01" };
+
+// --- NEW HELPERS ---
+function codeSuffixNumber(code) {
+  const m = String(code || "").match(/_(\d+)$/);
+  return m ? parseInt(m[1], 10) : Number.POSITIVE_INFINITY;
+}
+
+function sortByNumericSuffix(list) {
+  return [...(list || [])].sort(
+    (a, b) => codeSuffixNumber(a.code) - codeSuffixNumber(b.code)
+  );
+}
 
 function sectionKeyFromPath(pathname) {
   const m = pathname.match(/\/exercise\/([A-Za-z]+)_\d+/);
@@ -40,10 +52,9 @@ export default function Header() {
   const [user, setUser] = useState(getUserFromStorage() || { username: "Guest", role: "guest" });
   const isLoggedIn = Boolean(localStorage.getItem("token"));
 
-  // reflect auth changes from login/logout or other tabs
   useEffect(() => {
     const sync = () => setUser(getUserFromStorage() || { username: "Guest", role: "guest" });
-    sync(); // on mount + route change
+    sync();
     window.addEventListener("storage", sync);
     window.addEventListener("auth-changed", sync);
     return () => {
@@ -54,7 +65,6 @@ export default function Header() {
 
   const [group, setGroup] = useState("statistics");
   const [activeMenu, setActiveMenu] = useState("basics");
-  const [selectedExerciseIndex, setSelectedExerciseIndex] = useState(null);
 
   const [codeMap, setCodeMap] = useState({ statistics: {}, differential: {} });
 
@@ -80,33 +90,48 @@ export default function Header() {
   }, []);
 
   // URL drives section/group
-  // URL drives section/group + a single safe default redirect from root
-    useEffect(() => {
-      const key = sectionKeyFromPath(location.pathname);
-      if (key) {
-        setActiveMenu(key);
-        setGroup(["basics", "mean", "sd", "insights"].includes(key) ? "statistics" : "differential");
-        return;
-      }
-      // Only redirect from "/" (landing). Do NOT redirect from other routes to avoid loops.
-      if (location.pathname === "/" || location.pathname === "/index.html") {
-        setGroup("statistics");
-        setActiveMenu("basics");
-        const target = `/exercise/${DEFAULT_BY_GROUP.statistics}`;
-        if (location.pathname !== target) safeNavigate(target, { replace: true });
-      }
-    }, [location.pathname, safeNavigate]);
-
+  useEffect(() => {
+    const key = sectionKeyFromPath(location.pathname);
+    if (key) {
+      setActiveMenu(key);
+      setGroup(["basics", "mean", "sd", "insights"].includes(key) ? "statistics" : "differential");
+      return;
+    }
+    if (location.pathname === "/" || location.pathname === "/index.html") {
+      setGroup("statistics");
+      setActiveMenu("basics");
+      const target = `/exercise/${DEFAULT_BY_GROUP.statistics}`;
+      if (location.pathname !== target) safeNavigate(target, { replace: true });
+    }
+  }, [location.pathname, safeNavigate]);
 
   const currentCodeList = codeMap?.[group]?.[activeMenu] ?? [];
-  const path = location.pathname || "";
-  const isStatisticsActive = /\/exercise\/(Basics|Mean|SD|Insights)_\d+/i.test(path);
-  const isDifferentialActive = /\/exercise\/(Functions|EvenOdd|Derivative|Applications)_\d+/i.test(path);
+
+  // --- SORTED list so numbering matches codes ---
+  const sortedCodeList = useMemo(() => {
+    const byCode = new Map();
+    currentCodeList.forEach((x) => x?.code && byCode.set(x.code, x));
+    return sortByNumericSuffix([...byCode.values()]);
+  }, [currentCodeList]);
+
+  // Active code & index
+  const activeCode = useMemo(() => {
+    const m = location.pathname.match(/\/exercise\/([A-Za-z]+_\d+)/);
+    return m ? m[1] : null;
+  }, [location.pathname]);
+
+  const activeIndex = useMemo(
+    () => sortedCodeList.findIndex((x) => x.code === activeCode),
+    [sortedCodeList, activeCode]
+  );
+
+  const isStatisticsActive = /\/exercise\/(Basics|Mean|SD|Insights)_\d+/i.test(location.pathname);
+  const isDifferentialActive = /\/exercise\/(Functions|EvenOdd|Derivative|Applications)_\d+/i.test(location.pathname);
 
   const handleLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
-    window.dispatchEvent(new Event("auth-changed")); // tell header to refresh
+    window.dispatchEvent(new Event("auth-changed"));
     safeNavigate("/", { replace: true });
   };
 
@@ -120,16 +145,14 @@ export default function Header() {
     }
   };
 
-  const handleExerciseClick = (index) => {
-    const code = currentCodeList[index]?.code;
+  const handleExerciseClick = (ex) => {
+    const code = ex?.code;
     if (code) {
-      safeNavigate(`/exercise/${code}`, {replace: true});
-      setSelectedExerciseIndex(index);
+      safeNavigate(`/exercise/${code}`, { replace: true });
     } else {
       const prefix = prefixMap[activeMenu];
       const fallback = prefix ? `${prefix}_01` : DEFAULT_BY_GROUP[group];
-      safeNavigate(`/exercise/${fallback}`, {replace: true});
-      setSelectedExerciseIndex(null);
+      safeNavigate(`/exercise/${fallback}`, { replace: true });
     }
   };
 
@@ -148,7 +171,6 @@ export default function Header() {
             onClick={() => {
               setGroup("statistics");
               setActiveMenu("basics");
-              setSelectedExerciseIndex(null);
               safeNavigate(`/exercise/${DEFAULT_BY_GROUP.statistics}`, { replace: true });
             }}
           >
@@ -161,7 +183,6 @@ export default function Header() {
             onClick={() => {
               setGroup("differential");
               setActiveMenu("functions");
-              setSelectedExerciseIndex(null);
               safeNavigate(`/exercise/${DEFAULT_BY_GROUP.differential}`, { replace: true });
             }}
           >
@@ -172,7 +193,9 @@ export default function Header() {
         {/* Section tabs */}
         <nav className="flex gap-4 text-sm font-medium text-blue-700">
           {Object.entries(exerciseConfig[group]).map(([key, label]) => {
-            const firstFromApi = codeMap?.[group]?.[key]?.[0]?.code;
+            const listRaw = codeMap?.[group]?.[key] ?? [];
+            const listSorted = sortByNumericSuffix(listRaw);
+            const firstFromApi = listSorted[0]?.code;
             const prefix = prefixMap[key];
             const targetCode = firstFromApi || (prefix ? `${prefix}_01` : DEFAULT_BY_GROUP[group]);
 
@@ -180,10 +203,7 @@ export default function Header() {
               <Link
                 key={key}
                 to={`/exercise/${targetCode}`}
-                onClick={() => {
-                  setActiveMenu(key);
-                  setSelectedExerciseIndex(null);
-                }}
+                onClick={() => setActiveMenu(key)}
                 className={`hover:underline ${activeMenu === key ? "underline font-bold text-black" : ""}`}
               >
                 {label}
@@ -195,23 +215,24 @@ export default function Header() {
         {/* Right side: user chip + auth actions + exercise buttons */}
         <div className="flex items-center gap-2 flex-wrap justify-end">
           {/* Exercise number buttons */}
-          {currentCodeList.map((ex, index) => (
+          {sortedCodeList.map((ex, index) => (
             <button
               key={ex.code}
-              onClick={() => handleExerciseClick(index)}
+              onClick={() => handleExerciseClick(ex)}
               title={ex.code}
               className={`w-6 h-6 text-xs font-bold border rounded transition-all ${
-                selectedExerciseIndex === index ? "bg-blue-500 text-white" : "bg-white text-blue-800 hover:bg-blue-100"
+                activeIndex === index
+                  ? "bg-blue-500 text-white"
+                  : "bg-white text-blue-800 hover:bg-blue-100"
               }`}
             >
               {index + 1}
             </button>
           ))}
 
-          {/* User chip - always visible */}
+          {/* User chip */}
           <span className="px-2 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-medium border border-blue-100">
-            {user?.username ?? "Guest"}{" "}
-            <span className="opacity-70">({user?.role ?? "guest"})</span>
+            {user?.username ?? "Guest"} <span className="opacity-70">({user?.role ?? "guest"})</span>
           </span>
 
           {/* Auth actions */}
@@ -220,14 +241,12 @@ export default function Header() {
               <Link
                 to="/login"
                 className="bg-blue-600 text-white text-xs px-2 py-1 rounded hover:bg-blue-700"
-                title="Log in"
               >
                 Login
               </Link>
               <button
                 onClick={continueAsGuest}
                 className="bg-gray-600 text-white text-xs px-2 py-1 rounded hover:bg-gray-700"
-                title="Continue as Guest"
               >
                 Continue as Guest
               </button>
@@ -236,7 +255,6 @@ export default function Header() {
             <button
               onClick={handleLogout}
               className="bg-red-600 text-white text-xs px-2 py-1 rounded hover:bg-red-700"
-              title="Log out"
             >
               Logout
             </button>
