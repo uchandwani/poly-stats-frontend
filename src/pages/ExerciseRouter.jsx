@@ -55,7 +55,6 @@ export default function ExerciseRouter() {
   if (functionDerivativeApproach.includes(code)) return <DerivativeApproach />;
   if (functionEvenOdd.includes(code)) return <EvenOddFunctions/>; // ✅ NEW
   if (statMeasuresCodes.includes(code)) return <StatMeasures />;
-  if (code?.startsWith("Basics_")) return <GroupedMeasures />;
   if (code?.startsWith("Mean_") || code?.startsWith("SD_")) return <StatMeasures />;
 
   return <StatMeasures />;
