@@ -133,14 +133,20 @@ export default function GroupedMeasures() {
     loadExerciseAndSubmission();
   }, [code, studentId]);
 
-  const handleValidation = () => {
+ // --- replace handleValidation entirely ---
+const handleValidation = () => {
   if (!engine?.generateExpectedRows || !config) return;
+
+  // Build expected from the same sources studentRows used
   const expected = engine.generateExpectedRows(config.intervals, config.freqs);
+
+  // Which columns should be validated? (comes from tableConfig)
   const keysToValidate = config?.table?.expectedColumns ?? [];
 
-  // Clone rows so we can safely modify flags like isMedian
+  // Clone rows so we can set row-level flags like isModal/isMedian
   const updatedRows = studentRows.map((row) => ({ ...row }));
 
+  // Per-row validation results shaped for ValidatedInputTable
   const results = updatedRows.map((row, rowIndex) => {
     const expectedRow = expected[rowIndex] || {};
     const resultForRow = {};
@@ -148,26 +154,31 @@ export default function GroupedMeasures() {
     keysToValidate.forEach((key) => {
       const expectedVal = parseFloat(expectedRow[key]);
       const actualVal = parseFloat(row[key]);
-      const isValid = !isNaN(expectedVal) && !isNaN(actualVal) && Math.abs(expectedVal - actualVal) < 0.01;
-      resultForRow[key] = isValid;
+      const isValid =
+        Number.isFinite(expectedVal) &&
+        Number.isFinite(actualVal) &&
+        Math.abs(expectedVal - actualVal) < 0.01; // tolerance
+
+      // IMPORTANT: emit `${key}Correct` so ValidatedInputTable colors cells
+      resultForRow[`${key}Correct`] = isValid;
     });
 
-    // Set isModal for mode
+    // Mode: mark modal class on both row + result object
     if (config.statMeasure === "GroupedMode") {
-      const isModal = expectedRow.isModal ?? false;
-      resultForRow["isModal"] = isModal;
+      const isModal = !!expectedRow.isModal;
       updatedRows[rowIndex].isModal = isModal;
+      resultForRow.isModal = isModal;
     }
 
     return resultForRow;
   });
 
-  // Additional logic for GroupedMedian
+  // Median: compute and flag median row (row-level, not per-cell)
   if (config.statMeasure === "GroupedMedian") {
-    const N = updatedRows.reduce((sum, r) => sum + Number(r.fi), 0);
+    const N = updatedRows.reduce((sum, r) => sum + Number(r.fi || 0), 0);
     let cumulative = 0;
     const medianIndex = updatedRows.findIndex((row) => {
-      cumulative += Number(row.fi);
+      cumulative += Number(row.fi || 0);
       return cumulative >= N / 2;
     });
     if (medianIndex !== -1) {
@@ -175,9 +186,10 @@ export default function GroupedMeasures() {
     }
   }
 
-  setStudentRows(updatedRows);       // update flagged rows with isMedian/isModal
-  setValidationResults(results);     // update tick/cross validations
+  setStudentRows(updatedRows);
+  setValidationResults(results); // ✅ keys match the table’s `${col}Correct` lookup
 };
+
 
 
   const handleSummaryValidation = (stats) => {
