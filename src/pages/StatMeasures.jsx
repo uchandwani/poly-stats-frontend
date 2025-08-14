@@ -164,30 +164,53 @@ export default function StatMeasures() {
   };
 
   const handleSubmit = async (isFinal) => {
+  setIsSubmitting(true);
+
+  // Safely parse JSON even when body is empty or non-JSON
+  const parseJsonSafe = async (res) => {
+    const text = await res.text();
+    if (!text) return null; // e.g., 204 No Content
     try {
-      setIsSubmitting(true);
-      const res = await fetch(`${baseURL}/submissions/save`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          exerciseCode: code,
-          studentId,
-          analysisText: studentNote,
-          tableInputs: studentRows,
-          summaryStats: studentSummary,
-          isFinal
-        })
-      });
-      const result = await res.json();
-      if (!result.ok) throw new Error(result.error);
-      alert(isFinal ? "✅ Submission saved!" : "💾 Draft saved!");
-    } catch (err) {
-      console.error("❌ Save error:", err);
-      alert("❌ Error saving. See console.");
-    } finally {
-      setIsSubmitting(false);
+      return JSON.parse(text);
+    } catch {
+      return { raw: text }; // non-JSON (HTML/text) payloads
     }
   };
+
+  try {
+    const res = await fetch(`${API_BASE}/submissions/save`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        exerciseCode: code,
+        studentId,
+        analysisText: studentNote,
+        tableInputs: studentRows,
+        summaryStats: studentSummary,
+        isFinal
+      })
+    });
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      throw new Error(`HTTP ${res.status}${errText ? ` – ${errText}` : ""}`);
+    }
+
+    const result = await parseJsonSafe(res);
+    // If your backend returns a JSON envelope: { ok: true|false, error? }
+    if (result && Object.prototype.hasOwnProperty.call(result, "ok") && !result.ok) {
+      throw new Error(result.error || "Unknown save error");
+    }
+
+    alert(isFinal ? "✅ Submission saved!" : "💾 Draft saved!");
+  } catch (err) {
+    console.error("❌ Save error:", err);
+    alert(`❌ Error saving: ${err.message}`);
+  } finally {
+    setIsSubmitting(false);
+  }
+};
+
 
   if (loadError) return <p className="p-4 text-red-600">{loadError}</p>;
   if (!config || !engine) return <p className="p-4">⏳ Loading…</p>;
